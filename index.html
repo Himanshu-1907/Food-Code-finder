@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="theme-color" content="#0b0b0d">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<title>Food Code Finder</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0b0b0d;color:#fff;font-family:Arial,sans-serif;min-height:100vh;display:flex;justify-content:center}
+.app{width:min(94vw,520px);padding:30px 18px;text-align:center}
+h1{font-size:28px;margin:5px 0 7px}.sub{color:#999;margin-bottom:25px}
+.mic{width:190px;height:190px;border:0;border-radius:50%;font-size:25px;font-weight:700;background:#fff;color:#111;box-shadow:0 0 0 9px #242428;cursor:pointer}
+.mic small{font-size:15px}.mic.listening{background:#e53935;color:#fff;animation:pulse 1s infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 22px #242428;transform:scale(1.02)}}
+.status{height:27px;margin-top:27px;color:#aaa;font-size:16px}
+.transcript{height:27px;color:#666;font-size:14px;overflow:hidden}
+.code{font-size:78px;font-weight:900;line-height:1.12;margin-top:5px;min-height:108px;max-height:360px;overflow:auto}
+.help{color:#777;font-size:13px;line-height:1.5;margin-top:20px}
+.err{color:#ff7777}
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>Food Code Finder</h1>
+  <div class="sub">OFFLINE • Tap and say the food name</div>
+  <button class="mic" id="mic">🎤<br><small>TAP TO SPEAK</small></button>
+  <div class="status" id="status">Ready</div>
+  <div class="transcript" id="transcript"></div>
+  <div class="code" id="code">—</div>
+  <div class="help">Example: “Paneer Biryani” → <b>157</b><br>Speak naturally. Quantity is ignored.</div>
+</div>
+
+<script>
+/* Menu from the supplied restaurant menu photo. */
+const MENU = [
+["1","Masala Salad"],["2","Tomato Salad"],["3","Green Salad"],
+["4","Tomato Soup"],["5","Sweet Corn Soup"],["6","Veg. Corn Soup"],["7","Veg. Hot & Sour Soup"],["8","Mushroom Soup"],["9","Veg. Mancho Soup"],
+["10","Veg. Manchuria Wet"],["11","Veg. Manchuria Dry"],["12","Gobi Manchuria"],["13","Schezwan Manchuria"],["14","Paneer Manchuria"],["15","Baby Corn Manchuria"],["16","Baby Corn Majestick"],["17","Paneer Majestick"],["18","Chilly Paneer"],["19","Chilly Baby Corn"],["20","Mushroom Manchuria"],["21","Chilly Mushroom"],["22","Crispy Corn"],["23","Paneer Tikka Dry"],
+["24","Veg 65"],["25","Alu 65"],["26","Gobi 65"],["27","Paneer 65"],["28","Baby Corn 65"],["29","Mushroom 65"],
+["30","Veg. Noodles"],["31","Schezwan Noodles"],["32","Fried Noodles"],["33","American Chopses"],
+["34","Dal Makhani"],["35","Dal Fry"],["36","Dal Pan Methi Wala"],["37","Dal Palak"],["38","Dal Tadka"],["39","Dal Butter"],
+["40","Veg. Kofta"],["41","Malai Kofta"],["42","Gujarati Kofta"],["43","Kajal Kofta"],["44","Paneer Kofta"],["45","Punjabi Kofta"],["46","Rani Kofta"],["47","Bul Bul Kofta"],["48","Palak Kahmiri Kofta"],
+["49","Alu Jeera Dry"],["50","Alu Gobi Masala"],["51","Alu Tomato"],["52","Alu Palak"],["53","Alu Matar"],["54","Alu Paneer"],["55","Baby Corn Masala"],["56","Baby Corn Paneer"],["57","Butter Mushroom Masala"],["58","Corn Palak"],["59","Capsicum Masala"],["60","Chana Masala"],["61","Chana Paneer"],["62","Dum-Ka-Alu"],["63","Dum-Ka-Alu Nawabi"],["64","Ginger Alu"],["65","Green Peas Masala"],["66","Ginger Paneer"],["67","Hara Bhara Masala"],["68","Handi Paneer"],["69","Kadai Veg."],["70","Kadai Paneer"],["71","Kaju Butter Masala"],["204","Kaju Tomato"],["72","Kaju Paneer"],["73","Kaju Makhanwala"],["74","Kadai Mushroom"],["75","Acha Lacha Paneer"],["76","Mutter Palak"],["77","Mixed Vegetable"],["78","Mutter Paneer"],["79","Marwadi Veg."],["80","Mutter Mushroom Masala"],["81","Mushroom Masala"],["82","Mushroom Paneer"],["83","Methi Chaman"],["84","Plain Palak"],["85","Punjabi Chana Masala"],["86","Paneer Butter Masala"],["87","Paneer Kheema Masala"],["88","Palak Paneer"],["89","Paneer Chatpata"],["90","Paneer Makhaniwala"],["91","Paneer DO Pyazza"],["92","Paneer Bhurji"],["93","Paneer Patiala"],["94","Paneer Tikka Masala"],["95","Paneer Dil Rooba"],["96","Paneer Pasanda"],["97","Paneer Paneer"],["98","Stuff Capsicum Masala"],["99","Stuff Tomato Masala"],["100","Spl. Punjabi Gobi Masala"],
+["101","Shai Paneer"],["102","Schezwan Hundi Paneer"],["103","Tomato Chutney"],["104","Tomato Curry"],["105","Veg. Kurma"],["106","Veg. Kheema Masala"],["107","Veg. Garlic"],["108","Veg. Do Pyazza"],["109","Veg. Kolapuri"],["110","Veg. Jaipuri"],["111","Veg. Punjabi"],["112","Veg. Singapuri"],["113","Veg. Chatpata"],["114","Veg. Navratan Kurma"],
+["115","Tandoori Roti"],["116","Butter Roti"],["117","Kothmir Roti"],["118","Kothmir Butter Roti"],["119","Pudina Roti"],["120","Pudina Butter Roti"],["121","Rumali Roti"],
+["122","Plain Naan"],["123","Butter Naan"],["124","Kothmir Naan"],["125","Kothmir Butter Naan"],["126","Pudina Naan"],["127","Pudina Butter Naan"],["128","Garlic Butter Naan"],["129","Baby Naan"],["130","Chatpata Naan"],["131","Kashmiri Naan"],["132","Stuff Naan"],
+["133","Plain Paratha"],["134","Alu Paratha"],["135","Pudina Paratha"],["136","Paneer Paratha"],["137","Lacha Paratha"],["138","Rajasthani Methi Paratha"],
+["139","Masala Kulcha"],["140","Paneer Kulcha"],["141","Stuff Kulcha"],
+["142","Plain Rice"],["143","Curd Rice"],["144","Lemon Rice"],["145","Butter Rice"],["146","Jeera Rice"],["147","Tomato Rice"],["148","Kaju Jeera Rice"],
+["149","Veg. Fried Rice"],["150","Paneer Fried Rice"],["151","Schezwan Fried Rice"],["152","Masala Fried Rice"],["153","Kaju Fried Rice"],["201","Mushroom Fried Rice"],
+["154","Veg. Biryani"],["155","Handi Biryani"],["156","Dum Biryani"],["157","Paneer Biryani"],["158","Kaju Biryani"],["159","Hyderabadi Biryani"],
+["160","Veg. Pulao"],["161","Corn Kaju Pulao"],["162","Kashmiri Pulao"],["163","Navratan Pulao"],["164","Punjabi Pulao"],["165","Paneer Pulao"],
+["166","Roasted Papad"],["167","Fry Papad"],["168","Butter Papad"],["169","Masala Papad"],["170","Spl. Punjabi Papad"],
+["171","Mixed Raitha"],["172","Onion Raitha"],["173","Bundi Raitha"],
+["174","Curd"],["175","Butter Milk"],["176","Lassi Sweet & Salted"],["177","Cooldrink"],["178","Cooldrink 750ml"],["179","Mineral Water"],
+["180","Kundan Paneer"],["181","Malai Methi Paneer"],["182","Paneer Pakiza"],["183","Paneer Makhaniya"],["184","Shangai Paneer"],["185","Paneer Kasha Masla"],
+["186","Veg. Mandakini"],["187","Jil Mil Veg."],["188","Khandari Veg."],["189","Veg. Ashiyana"],["190","Hariyali Methi Chaman"],["191","Jalsa Spl. Paneer & Veg."],
+["192","Stick Paneer"],["193","Dragon Paneer"],["194","Narmada Paneer"],["195","Veg. Spring Roll"],["196","Veg. Bullet"],
+["197","Nizam Biryani"],["198","Mushroom Biryani"],["199","Paneer Kheema Biryani"],["200","Kaju Paneer Biryani"]
+];
+
+const ALIASES = {
+  "panner":"paneer","paner":"paneer","paneer":"paneer",
+  "biriyani":"biryani","biriani":"biryani","briyani":"biryani",
+  "manchurian":"manchuria","schezwan":"schezwan",
+  "chilli":"chilly","chillies":"chilly",
+  "aloo":"alu","mutter":"mutter","matar":"matar",
+  "raita":"raitha","rayta":"raitha","roti":"roti",
+  "naan":"naan","nan":"naan","paratha":"paratha",
+  "masala":"masala","veg":"veg","vegetable":"veg",
+  "coke":"cooldrink","cold drink":"cooldrink",
+  "water":"mineral water"
+};
+
+const ITEMS = MENU.map(([code,name])=>({code,name,key:norm(name)}));
+
+function findMultipleFoods(spoken){
+  let q = norm(spoken).replace(/\b\d+\b/g," ").replace(/\s+/g," ").trim();
+  if(!q) return [];
+  const candidates = ITEMS.filter(x=>x.key.length >= 3).slice().sort((a,b)=>b.key.length-a.key.length);
+  const hits=[], occupied=[];
+  for(const item of candidates){
+    const escaped=item.key.split(" ").map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("\\s+");
+    const re=new RegExp("\\b"+escaped+"\\b","g");
+    let m;
+    while((m=re.exec(q))!==null){
+      const start=m.index,end=start+m[0].length;
+      if(!occupied.some(r=>start<r.end && end>r.start)){
+        hits.push({item,start,end}); occupied.push({start,end}); break;
+      }
+    }
+  }
+  hits.sort((a,b)=>a.start-b.start);
+  return hits.map(h=>h.item);
+}
+
+
+function norm(s){
+  s = String(s||"").toLowerCase()
+    .replace(/[.,'’‘"()]/g," ")
+    .replace(/[-/]/g," ")
+    .replace(/\b(please|give|show|tell|find|code|number|item|food|for|me|the|is|of|and|add|one|two|three|four|five|six|seven|eight|nine|ten)\b/g," ")
+    .replace(/\s+/g," ").trim();
+  const words=s.split(" ").filter(Boolean).map(w=>ALIASES[w]||w);
+  return words.join(" ");
+}
+
+function tokens(s){return new Set(norm(s).split(" ").filter(Boolean));}
+
+function similarity(a,b){
+  const A=tokens(a), B=tokens(b);
+  if(!A.size||!B.size) return 0;
+  let common=0;
+  A.forEach(x=>{if(B.has(x)) common++;});
+  let score=(2*common)/(A.size+B.size);
+  if(norm(a)===norm(b)) score=1;
+  if(norm(a).includes(norm(b))||norm(b).includes(norm(a))) score=Math.max(score,.88);
+  return score;
+}
+
+function levenshtein(a,b){
+  const prev=Array(b.length+1).fill(0).map((_,i)=>i);
+  for(let i=1;i<=a.length;i++){
+    let cur=[i];
+    for(let j=1;j<=b.length;j++)
+      cur[j]=Math.min(cur[j-1]+1,prev[j]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
+    for(let j=0;j<cur.length;j++) prev[j]=cur[j];
+  }
+  return prev[b.length];
+}
+
+function matchItem(spoken){
+  let q=norm(spoken);
+  if(!q) return null;
+
+  // Remove common quantity words left by speech recognition.
+  q=q.replace(/\b\d+\b/g," ").replace(/\s+/g," ").trim();
+
+  // Exact.
+  let exact=ITEMS.find(x=>x.key===q);
+  if(exact) return exact;
+
+  // Strong token match.
+  let ranked=ITEMS.map(x=>({x,s:similarity(q,x.key)})).sort((a,b)=>b.s-a.s);
+  if(ranked[0].s>=.84) return ranked[0].x;
+
+  // Character-level fallback for misheard words.
+  let best=null,bestScore=0;
+  for(const x of ITEMS){
+    const d=levenshtein(q,x.key);
+    const char=1-d/Math.max(q.length,x.key.length);
+    const s=.65*ranked.find(r=>r.x===x)?.s + .35*char;
+    if(s>bestScore){bestScore=s;best=x;}
+  }
+  return bestScore>=.68 ? best : null;
+}
+
+const mic=document.getElementById("mic");
+const status=document.getElementById("status");
+const transcript=document.getElementById("transcript");
+const code=document.getElementById("code");
+
+const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+
+if(!SpeechRecognition){
+  status.innerHTML='<span class="err">Voice search needs Chrome on Android.</span>';
+  mic.disabled=true;
+}else{
+  const rec=new SpeechRecognition();
+  rec.lang="en-IN";
+  // No server/API calls are made by this page. Speech recognition availability offline depends on the device/browser speech engine.
+  rec.continuous=false;
+  rec.interimResults=true;
+  rec.maxAlternatives=8;
+
+  let listening=false;
+
+  mic.addEventListener("click",()=>{
+    if(listening) return;
+    transcript.textContent="";
+    code.textContent="—";
+    status.textContent="Listening…";
+    listening=true;
+    mic.classList.add("listening");
+    try{rec.start();}catch(e){}
+  });
+
+  rec.onresult=(event)=>{
+    let bestText="";
+    let foundItems=[];
+    for(let i=0;i<event.results.length;i++){
+      const result=event.results[i];
+      for(let j=0;j<result.length;j++){
+        const text=result[j].transcript.trim();
+        if(!bestText) bestText=text;
+        const many=findMultipleFoods(text);
+        if(many.length>foundItems.length){ foundItems=many; bestText=text; }
+      }
+    }
+    transcript.textContent=bestText ? "Heard: "+bestText : "";
+    if(event.results[event.results.length-1].isFinal){
+      if(foundItems.length){
+        code.innerHTML=foundItems.map(x=>x.code).join("<br>");
+        status.textContent=foundItems.length===1 ? "Code found" : foundItems.length+" codes found";
+      }else{
+        const fallback=matchItem(bestText);
+        if(fallback){ code.textContent=fallback.code; status.textContent="Code found"; }
+        else { code.textContent="?"; status.textContent="Food not found — try again"; }
+      }
+    }
+  };
+
+  rec.onerror=(e)=>{
+    listening=false; mic.classList.remove("listening");
+    if(e.error==="not-allowed"||e.error==="service-not-allowed")
+      status.innerHTML='<span class="err">Allow microphone permission, then try again.</span>';
+    else if(e.error==="no-speech")
+      status.textContent="No speech heard — tap and speak again";
+    else
+      status.textContent="Voice error — try again";
+  };
+
+  rec.onend=()=>{
+    listening=false;
+    mic.classList.remove("listening");
+    if(status.textContent==="Listening…") status.textContent="Ready";
+  };
+}
+</script>
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
+</body>
+</html>
